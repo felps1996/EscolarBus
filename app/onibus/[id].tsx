@@ -50,7 +50,15 @@ export default function Horarios() {
     // Função que busca a posição atual calculada pelo backend
     const buscarPosicaoEstrategica = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/onibus/posicao`);
+        // Adicionamos ?_cb=${new Date().getTime()} para que a URL seja sempre única
+        const response = await fetch(`${API_URL}/api/onibus/posicao?_cb=${new Date().getTime()}`, {
+          method: 'GET',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        
         if (response.ok) {
           const data = await response.json();
           setBusLocation({
@@ -58,14 +66,13 @@ export default function Horarios() {
             longitude: data.longitude
           });
           if (data.rotaCompleta) {
-            setBusRoute(data.rotaCompleta); // Guarda os pontos da rua
+            setBusRoute(data.rotaCompleta);
           }
         }
       } catch (error) {
         console.log('Erro ao buscar coordenadas do backend:', error);
       }
     };
-
     // Só inicia a busca repetitiva se o modal do mapa estiver aberto
     if (isMapVisible) {
       buscarPosicaoEstrategica(); // Busca imediata ao abrir
