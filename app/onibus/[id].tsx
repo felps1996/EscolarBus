@@ -31,8 +31,8 @@ export default function Horarios() {
   const [region, setRegion] = useState({
     latitude: -9.571307, 
     longitude: -35.753173,
-    latitudeDelta: 0.02,
-    longitudeDelta: 0.02,
+    latitudeDelta: 0.009,   // <-- Mais zoom
+    longitudeDelta: 0.009,
   });
 
   // Estado que guarda a posição do ônibus (agora alimentado pela API)
