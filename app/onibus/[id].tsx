@@ -72,7 +72,7 @@ export default function Horarios() {
       
       interval = window.setInterval(() => {
         buscarPosicaoEstrategica();
-      }, 1500); // Atualiza o marcador a cada 1.5 segundos
+      }, 3000); // Atualiza o marcador a cada 1.5 segundos
     }
 
     // Limpa o timer da memória ao fechar o mapa para não vazar processamento
