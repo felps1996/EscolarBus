@@ -12,7 +12,8 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -40,6 +41,8 @@ export default function Horarios() {
     longitude: -35.750000,
   });
 
+  const [busRoute, setBusRoute] = useState<{latitude: number, longitude: number}[]>([]);
+
   // ================= INTEGRANTE DA API DE SIMULAÇÃO =================
   useEffect(() => {
     let interval: number;
@@ -54,6 +57,9 @@ export default function Horarios() {
             latitude: data.latitude,
             longitude: data.longitude
           });
+          if (data.rotaCompleta) {
+            setBusRoute(data.rotaCompleta); // Guarda os pontos da rua
+          }
         }
       } catch (error) {
         console.log('Erro ao buscar coordenadas do backend:', error);
@@ -168,13 +174,18 @@ export default function Horarios() {
               initialRegion={region}
               showsUserLocation={true}
               showsMyLocationButton={false}
-            >
-              {/* Marcador do Ônibus - Coordenadas linkadas dinamicamente à API */}
-              <Marker
-                coordinate={busLocation}
-                title={`Ônibus ${id || '406'}`}
-                description="Acompanhando em tempo real"
               >
+              {/* DESENHA A LINHA DA PISTA SE HOUVER ROTA */}
+              {busRoute.length > 0 && (
+                <Polyline
+                  coordinates={busRoute}
+                  strokeColor="#0000FF" // Cor azul da linha contínua
+                  strokeWidth={4} // Grossura da linha na pista
+                />
+              )}
+
+              {/* Marcador do Ônibus */}
+              <Marker coordinate={busLocation} title={`Ônibus ${id || '406'}`}>
                 <View style={styles.busMarkerContainer}>
                   <Ionicons name="bus" size={20} color="#FFFFFF" />
                 </View>
