@@ -17,12 +17,35 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// 1. URL da sua API no Render (Altere para a sua URL oficial)
+// 1. URL da sua API no Render
 const API_URL = 'https://escolarbus-api.onrender.com'; 
+
+// Dicionário com as informações reais das paradas de cada ônibus em Maceió
+const DADOS_DAS_LINHAS: Record<string, Array<{ id: string; pontoName: string; status: string; horario: string }>> = {
+  "406": [
+    { id: '1', pontoName: 'Ponto: Av. Menino Marcelo VIII', status: 'Status: A caminho', horario: '09:50 AM' },
+    { id: '2', pontoName: 'Ponto: Terminal Salvador Lyra', status: 'Status: Chegando', horario: '10:15 AM' }
+  ],
+  "512": [
+    { id: '1', pontoName: 'Ponto: Parque Shopping Maceió', status: 'Status: Em trânsito', horario: '11:10 AM' },
+    { id: '2', pontoName: 'Ponto: UNIT - Cruz das Almas', status: 'Status: Próxima Parada', horario: '11:35 AM' }
+  ],
+  "607": [
+    { id: '1', pontoName: 'Ponto: UFAL - Campus A.C. Simões', status: 'Status: A caminho', horario: '01:20 PM' },
+    { id: '2', pontoName: 'Ponto: Terminal Eustáquio Gomes', status: 'Status: Recolhido', horario: '01:50 PM' }
+  ],
+  "1002": [
+    { id: '1', pontoName: 'Ponto: Trevo do Polo - AL-101 Sul', status: 'Status: Em trânsito', horario: '07:15 AM' },
+    { id: '2', pontoName: 'Ponto: Mercado Central de Maceió', status: 'Status: Finalizado', horario: '08:00 AM' }
+  ]
+};
 
 export default function Horarios() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
+
+  // Garante uma string válida para buscar no dicionário e enviar na URL
+  const linhaAtiva = (id as string) || '406';
 
   // Estado para controlar a exibição do mapa por cima da interface
   const [isMapVisible, setIsMapVisible] = useState(false);
@@ -31,27 +54,25 @@ export default function Horarios() {
   const [region, setRegion] = useState({
     latitude: -9.571307, 
     longitude: -35.753173,
-    latitudeDelta: 0.009,   // <-- Mais zoom
-    longitudeDelta: 0.009,
+    latitudeDelta: 0.015,   
+    longitudeDelta: 0.015,
   });
 
-  // Estado que guarda a posição do ônibus (agora alimentado pela API)
+  // Estado que guarda a posição do ônibus (alimentado pela API)
   const [busLocation, setBusLocation] = useState({
-    latitude: -9.568500,
-    longitude: -35.750000,
+    latitude: -9.574676,
+    longitude: -35.755490,
   });
 
   const [busRoute, setBusRoute] = useState<{latitude: number, longitude: number}[]>([]);
 
   // ================= INTEGRANTE DA API DE SIMULAÇÃO =================
   useEffect(() => {
-    let interval: number;
+    let intervalId: any;
 
-    // Função que busca a posição atual calculada pelo backend
     const buscarPosicaoEstrategica = async () => {
       try {
-        // Adicionamos ?_cb=${new Date().getTime()} para que a URL seja sempre única
-        const response = await fetch(`${API_URL}/api/onibus/posicao?_cb=${new Date().getTime()}`, {
+        const response = await fetch(`${API_URL}/api/onibus/posicao?linha=${linhaAtiva}&_cb=${new Date().getTime()}`, {
           method: 'GET',
           headers: {
             'Cache-Control': 'no-cache',
@@ -61,11 +82,15 @@ export default function Horarios() {
         
         if (response.ok) {
           const data = await response.json();
-          setBusLocation({
-            latitude: data.latitude,
-            longitude: data.longitude
-          });
-          if (data.rotaCompleta) {
+          
+          if (data.latitude && data.longitude) {
+            setBusLocation({
+              latitude: Number(data.latitude),
+              longitude: Number(data.longitude)
+            });
+          }
+          
+          if (data.rotaCompleta && data.rotaCompleta.length > 0) {
             setBusRoute(data.rotaCompleta);
           }
         }
@@ -73,25 +98,23 @@ export default function Horarios() {
         console.log('Erro ao buscar coordenadas do backend:', error);
       }
     };
-    // Só inicia a busca repetitiva se o modal do mapa estiver aberto
+
     if (isMapVisible) {
       buscarPosicaoEstrategica(); // Busca imediata ao abrir
       
-      interval = window.setInterval(() => {
+      // Uso do temporizador global padrão do ambiente do React Native
+      intervalId = setInterval(() => {
         buscarPosicaoEstrategica();
-      }, 2500); // Atualiza o marcador a cada 2.5 segundos
+      }, 2500); 
     }
 
-    // Limpa o timer da memória ao fechar o mapa para não vazar processamento
     return () => {
-      if (interval) clearInterval(interval);
+      if (intervalId) clearInterval(intervalId);
     };
-  }, [isMapVisible]);
+  }, [isMapVisible, linhaAtiva]);
 
-  const pontosInfo = [
-    { id: '1', pontoName: 'Ponto: Av. Menino Marcelo VIII', status: 'Status: A caminho', horario: '09:50AM' },
-    { id: '2', pontoName: 'Ponto: Lojas Americanas XI', status: 'Status: A caminho', horario: '10:25AM' }
-  ];
+  // Captura os pontos corretos dinamicamente baseados na linha selecionada
+  const pontosInfo = DADOS_DAS_LINHAS[linhaAtiva] || DADOS_DAS_LINHAS["406"];
 
   return (
     <View style={styles.container}>
@@ -119,7 +142,7 @@ export default function Horarios() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.busActiveCard}>
-          <Text style={styles.busActiveText}>ONIBUS {id || '406'}</Text>
+          <Text style={styles.busActiveText}>ONIBUS {linhaAtiva}</Text>
           <Ionicons name="bus" size={26} color="#000000" />
         </View>
 
@@ -152,7 +175,7 @@ export default function Horarios() {
             <TouchableOpacity 
               style={styles.roundButton}
               activeOpacity={0.7}
-              onPress={() => setIsMapVisible(true)} // Ativa o modal e dispara o useEffect
+              onPress={() => setIsMapVisible(true)} 
             >
               <Ionicons name="map-outline" size={24} color="#000000" />
             </TouchableOpacity>
@@ -172,27 +195,27 @@ export default function Horarios() {
         visible={isMapVisible}
         onRequestClose={() => setIsMapVisible(false)}
       >
-        <View style={[StyleSheet.absoluteFillObject, styles.modalOverlay]}>
+        <View style={styles.modalOverlay}>
           <View style={styles.mapContainerCard}>
             
             <MapView
               provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-              style={[StyleSheet.absoluteFillObject, styles.map]}
+              style={styles.map} 
               initialRegion={region}
-              showsUserLocation={true}
+              showsUserLocation={false}
               showsMyLocationButton={false}
-              >
+            >
               {/* DESENHA A LINHA DA PISTA SE HOUVER ROTA */}
               {busRoute.length > 0 && (
                 <Polyline
                   coordinates={busRoute}
-                  strokeColor="#0000FF" // Cor azul da linha contínua
-                  strokeWidth={4} // Grossura da linha na pista
+                  strokeColor="#0000FF" 
+                  strokeWidth={5} 
                 />
               )}
 
               {/* Marcador do Ônibus */}
-              <Marker coordinate={busLocation} title={`Ônibus ${id || '406'}`}>
+              <Marker coordinate={busLocation} title={`Ônibus ${linhaAtiva}`}>
                 <View style={styles.busMarkerContainer}>
                   <Ionicons name="bus" size={20} color="#FFFFFF" />
                 </View>
@@ -387,10 +410,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#C0C0C0',
   },
   modalOverlay: {
+    flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 999, 
   },
   mapContainerCard: {
     width: SCREEN_WIDTH * 0.90,
@@ -405,7 +428,10 @@ const styles = StyleSheet.create({
     elevation: 10,
     position: 'relative', 
   },
-  map: {},
+  map: {
+    width: '100%',
+    height: '100%',
+  },
   busMarkerContainer: {
     backgroundColor: '#0000FF',
     padding: 8,
@@ -434,7 +460,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 5,
     elevation: 5,
-    zIndex: 1001, 
   },
   closeMapText: {
     fontSize: 16,
