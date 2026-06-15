@@ -1,23 +1,13 @@
+import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
-import { COLORS } from './theme/ colors';
-import { Login } from './app/login';
+import { StyleSheet, View } from 'react-native';
 
 export default function App() {
   return (
-    <View style={styles.container}>
+    <View>
       <StatusBar style="auto" />
-      <Login/>
+      {/* O Slot renderiza automaticamente a rota atual da pasta app (começando pelo app/index.tsx) */}
+      <Slot />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.blue_primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
-

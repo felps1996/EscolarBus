@@ -1,60 +1,74 @@
 import React, { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { API_URL } from '../services/api';
-import { Alert } from 'react-native';
-import { 
-  StyleSheet, 
-  Text, 
-  TouchableOpacity, 
-  View, 
-  KeyboardAvoidingView, 
-  Platform,
-  ScrollView,
-  Dimensions 
-} from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View, KeyboardAvoidingView, Platform, ScrollView, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+
+// IMPORTAÇÕES DO FIREBASE CLIENT
+import { auth } from '../firebaseConfig';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
 import { Logo } from '../components/LoginComponents/Logo/LogoFile';
 import { Input } from '../components/LoginComponents/input/LoginInput';
 import { Button } from '../components/LoginComponents/button/ButtonLogin';
 
-// Altura total real do display
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function Login() {
   const router = useRouter();
 
-  const [usuario, setUsuario] = useState('');
+  const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [carregando, setCarregando] = useState(false);
 
-  // 1. FUNÇÃO HANDLELOGIN LIMPA (Sem repetições)
   const handleLogin = async () => {
-    if (!usuario || !senha) {
+    if (!email || !senha) {
       Alert.alert('Erro', 'Preencha todos os campos.');
       return;
     }
 
+    setCarregando(true);
+
     try {
-      const response = await fetch(`${API_URL}/login`, {
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario, senha }),
+      // 1. Autenticação direta com o Firebase Auth Client SDK
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), senha);
+      const user = userCredential.user;
+
+      // 2. Validação de segurança: Bloqueia o acesso se o e-mail não foi verificado
+      if (!user.emailVerified) {
+        Alert.alert(
+          'E-mail não verificado', 
+          'Por favor, acesse sua caixa de entrada e confirme seu e-mail antes de efetuar o login no sistema.'
+        );
+        setCarregando(false);
+        return;
+      }
+
+      // 3. Sucesso: Redireciona para a Home passando o e-mail ou o displayName do usuário
+      Alert.alert('Sucesso', 'Bem-vindo ao EscolarBus!');
+      router.replace({
+        pathname: '/home',
+        params: { username: user.displayName || user.email }
       });
 
-      const data = await response.json();
-
-      if (response.status === 200) {
-        Alert.alert('Sucesso', `Bem-vindo, ${data.user.usuario}!`);
-        router.replace({
-        pathname: '/home',
-        params: { username: data.user.usuario }
-  });
-      } else {
-        Alert.alert('Erro de Autenticação', data.error);
-      }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      Alert.alert('Erro', 'Não foi possível conectar ao servidor.');
+      
+      // Tratamento dos códigos de erro nativos do Firebase Auth
+      if (
+        error.code === 'auth/invalid-credential' || 
+        error.code === 'auth/user-not-found' || 
+        error.code === 'auth/wrong-password'
+      ) {
+        Alert.alert('Erro de Autenticação', 'E-mail ou senha incorretos.');
+      } else if (error.code === 'auth/invalid-email') {
+        Alert.alert('Erro', 'O formato do e-mail digitado é inválido.');
+      } else if (error.code === 'auth/user-disabled') {
+        Alert.alert('Erro', 'Esta conta foi desativada por um administrador.');
+      } else {
+        Alert.alert('Erro', 'Não foi possível conectar ao serviço de autenticação.');
+      }
+    } finally {
+      setCarregando(false);
     }
   };
 
@@ -76,10 +90,12 @@ export default function Login() {
 
           <View style={styles.formCard}>
             <Input 
-              label="USUÁRIO" 
-              value={usuario}
-              onChangeText={setUsuario}
-              placeholder="Digite seu usuário"
+              label="E-MAIL" 
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Digite seu e-mail"
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
             
             <Input 
@@ -91,19 +107,29 @@ export default function Login() {
             />
           </View>
 
-          <TouchableOpacity 
-            style={styles.forgotPasswordButton}
-            onPress={() => router.push('/register')} 
-          >
-            <Text style={styles.forgotPasswordText}>Esqueci a senha</Text>
-          </TouchableOpacity>
+          {/* Links organizados lado a lado nas extremidades da tela */}
+          <View style={styles.linksContainer}>
+            <TouchableOpacity 
+              style={styles.forgotPasswordButton}
+              onPress={() => router.push('/register')} 
+            >
+              <Text style={styles.forgotPasswordText}>Esqueci a senha</Text>
+            </TouchableOpacity>
 
-          {/* 2. AJUSTE AQUI: Chamando a função diretamente sem chaves extras */}
+            <TouchableOpacity 
+              style={styles.signUpButton}
+              onPress={() => router.push('/signup')} 
+            >
+              <Text style={styles.signUpText}>Cadastre-se</Text>
+            </TouchableOpacity>
+          </View>
+
           <Button 
             onPress={handleLogin}
-            title="ENTRAR" 
+            title={carregando ? "CARREGANDO..." : "ENTRAR"} 
             variant="primary" 
             style={styles.enterButton}
+            disabled={carregando}
           />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -138,15 +164,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.05)',
   },
-  forgotPasswordButton: {
-    alignSelf: 'flex-start',
+  linksContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
     marginTop: 16,
-    marginLeft: 10,
+    paddingHorizontal: 10,
   },
+  forgotPasswordButton: {},
   forgotPasswordText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontFamily: 'monospace',
+  },
+  signUpButton: {},
+  signUpText: {
+    color: '#007AFF', 
+    fontSize: 16,
+    fontFamily: 'monospace',
+    fontWeight: 'bold',
   },
   enterButton: {
     backgroundColor: '#2E354F',
@@ -155,4 +192,3 @@ const styles = StyleSheet.create({
     borderRadius: 32,
   },
 });
-

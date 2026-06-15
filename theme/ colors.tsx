@@ -9,3 +9,5 @@ export const COLORS = {
   gray_input: '#2A3356', // Input do login
   gray_muted: '#757575',
 };
+
+export default COLORS;
