@@ -1,164 +1,150 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, View, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
+import MapView, { Polyline, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
-// Substitua pelo link da sua API do Render (sem a barra no final)
-const API_URL = 'https://seu-backend-no-render.onrender.com'; 
-// ID de teste do usuário que será o motorista (pegue um ID lá do seu Firestore)
-const MOTORISTA_ID = 'Qh01d4zbRC64QJrqV1ad';
+// 🧮 FUNÇÃO MATEMÁTICA PURA PARA DECODIFICAR A GEOMETRIA DO OSRM
+// (Dispensa o uso de qualquer biblioteca externa como mapbox)
+function decodePolyline(encoded: string) {
+  let points = [];
+  let index = 0, len = encoded.length;
+  let lat = 0, lng = 0;
 
-export default function Mapa() {
-  const mapRef = useRef<MapView>(null);
-  
-  // Posição inicial centralizada em Maceió/UFAL
-  const [localizacao, setLocalizacao] = useState({
-    latitude: -9.6658,
-    longitude: -35.7350,
-  });
+  while (index < len) {
+    let b, shift = 0, result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += dlat;
 
-  const [simulando, setSimulando] = useState(false);
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lng += dlng;
 
-  // 1. Função para buscar a localização real do banco de dados (Visão do Aluno)
-  const buscarLocalizacaoBanco = async () => {
-    try {
-      const response = await fetch(`${API_URL}/usuarios/${MOTORISTA_ID}/localizacao`);
-      if (response.ok) {
+    points.push({
+      latitude: (lat / 1E5),
+      longitude: (lng / 1E5)
+    });
+  }
+  return points;
+}
+
+export default function MapaScreen() {
+  const params = useLocalSearchParams();
+  const router = useRouter();
+  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Coordenadas da UNIT e do Parque Shopping
+  const originLat = parseFloat((params.originLat as string) || '-9.6419');
+  const originLng = parseFloat((params.originLng as string) || '-35.7001');
+  const destLat = parseFloat((params.destLat as string) || '-9.6425');
+  const destLng = parseFloat((params.destLng as string) || '-35.7022');
+
+  useEffect(() => {
+    async function fetchRoute() {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destLng},${destLat}?overview=full`;
+        const response = await fetch(url);
         const data = await response.json();
-        setLocalizacao({
-          latitude: data.latitude,
-          longitude: data.longitude,
-        });
-      }
-    } catch (error) {
-      console.log('Erro ao buscar localização:', error);
-    }
-  };
 
-  // 2. Loop para o Aluno ficar atualizando o mapa em tempo real
-  useEffect(() => {
-    buscarLocalizacaoBanco(); // Busca a primeira vez
-    
-    const interval = setInterval(() => {
-      buscarLocalizacaoBanco();
-    }, 3000); // Atualiza a cada 3 segundos
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // 3. Função para simular o ônibus andando (Envia dados para a API)
-  useEffect(() => {
-    let simularInterval: number;
-
-    if (simulando) {
-      let novaLat = localizacao.latitude;
-      let novaLng = localizacao.longitude;
-
-      simularInterval = setInterval(async () => {
-        // Incrementa um valor pequeno para andar em linha diagonal
-        novaLat += 0.0002;
-        novaLng += 0.0002;
-
-        setLocalizacao({ latitude: novaLat, longitude: novaLng });
-
-        // Envia a nova posição para a API salvar no Firestore
-        try {
-          await fetch(`${API_URL}/usuarios/localizacao`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              idUsuario: MOTORISTA_ID,
-              latitude: novaLat,
-              longitude: novaLng
-            })
-          });
-        } catch (error) {
-          console.log('Erro ao enviar simulação:', error);
+        if (data.routes && data.routes.length > 0) {
+          // Decodifica a rota usando a função JS pura ali de cima
+          const decodedCoords = decodePolyline(data.routes[0].geometry);
+          setCoordinates(decodedCoords);
         }
-      }, 2000); // Move o ônibus a cada 2 segundos
+      } catch (error) {
+        console.error("Erro ao buscar rota OSRM:", error);
+      } finally {
+        setLoading(false);
+      }
     }
 
-    return () => clearInterval(simularInterval);
-  }, [simulando]);
+    fetchRoute();
+  }, [originLat, originLng, destLat, destLng]);
+
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#0026FF" />
+        <Text style={styles.loadingText}>Carregando o mapa das frotas...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <MapView
-        ref={mapRef}
+        provider={PROVIDER_DEFAULT}
         style={styles.map}
         initialRegion={{
-          latitude: localizacao.latitude,
-          longitude: localizacao.longitude,
-          latitudeDelta: 0.01, // Zoom do mapa
-          longitudeDelta: 0.01,
-        }}
-        region={{
-          latitude: localizacao.latitude,
-          longitude: localizacao.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
+          latitude: (originLat + destLat) / 2,
+          longitude: (originLng + destLng) / 2,
+          latitudeDelta: Math.abs(originLat - destLat) * 2 || 0.02,
+          longitudeDelta: Math.abs(originLng - destLng) * 2 || 0.02,
         }}
       >
-        {/* Marcador do Ônibus na Tela */}
-        <Marker
-          coordinate={{
-            latitude: localizacao.latitude,
-            longitude: localizacao.longitude,
-          }}
-          title="EscolarBus"
-          description="Ônibus em movimento"
-          pinColor="#F3123C" // Cor em destaque
-        />
+        {/* Marcador do Ônibus */}
+        <Marker coordinate={{ latitude: originLat, longitude: originLng }} title="Ônibus 512">
+          <View style={styles.busMarker}>
+            <Ionicons name="bus" size={18} color="white" />
+          </View>
+        </Marker>
+
+        {/* Marcador do Destino */}
+        <Marker coordinate={{ latitude: destLat, longitude: destLng }} title="Parada Final" />
+        
+        {/* Desenha a linha da rota direto no mapa do Expo */}
+        {coordinates.length > 0 && (
+          <Polyline coordinates={coordinates} strokeWidth={5} strokeColor="#0026FF" />
+        )}
       </MapView>
 
-      {/* Botão flutuante para ativar a simulação */}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[styles.button, simulando ? styles.btnAtivo : styles.btnInativo]}
-          onPress={() => setSimulando(!simulando)}
-        >
-          <Text style={styles.buttonText}>
-            {simulando ? '🛑 Parar Ônibus' : '🚌 Iniciar Movimento do Ônibus'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+      {/* Botão de Voltar */}
+      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <Ionicons name="chevron-back" size={24} color="black" />
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  map: {
-    width: '100%',
-    height: '100%',
-  },
-  buttonContainer: {
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  map: { flex: 1 },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F4F4' },
+  loadingText: { marginTop: 12, fontSize: 16, color: '#333333', fontWeight: '500' },
+  backButton: {
     position: 'absolute',
-    bottom: 30,
+    top: 50,
     left: 20,
-    right: 20,
+    backgroundColor: '#FFFFFF',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
     alignItems: 'center',
-  },
-  button: {
-    paddingVertical: 15,
-    paddingHorizontal: 25,
-    borderRadius: 30,
     elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
-  btnInativo: {
-    backgroundColor: '#007AFF',
-  },
-  btnAtivo: {
-    backgroundColor: '#FF3B30',
-  },
-  buttonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  busMarker: {
+    backgroundColor: '#0026FF',
+    padding: 8,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    elevation: 5,
+  }
 });
