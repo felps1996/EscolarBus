@@ -1,28 +1,27 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   initializeAuth, 
-  getReactNativePersistence 
+  getReactNativePersistence,
+  getAuth
 } from "firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Cole aqui as credenciais do seu projeto geradas no Console do Firebase
+// Credenciais oficiais do projeto EscolarBus
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID
+  apiKey: "AIzaSyAUnjUSfYQpPiVz9rH852EWrD43AsHSKDI",
+  authDomain: "escolarbus-database.firebaseapp.com",
+  databaseURL: "https://escolarbus-database-default-rtdb.firebaseio.com",
+  projectId: "escolarbus-database",
+  storageBucket: "escolarbus-database.firebasestorage.app",
+  messagingSenderId: "1009947958450",
+  appId: "1:1009947958450:web:0308bccce453096cfcbdab",
+  measurementId: "G-JP94DNHJWQ"
 };
 
-// Inicializa o Firebase Application
-const app = initializeApp(firebaseConfig);
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Inicializa o Auth configurando a persistência de sessão nativa para o celular
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+const auth = getApps().length === 0 
+  ? initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) })
+  : getAuth(app);
 
 export { auth };
